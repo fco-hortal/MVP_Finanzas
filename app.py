@@ -2,9 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
-from io import BytesIO
 import plotly.express as px
-import plotly.graph_objects as go
 
 # Configuración de la página
 st.set_page_config(
