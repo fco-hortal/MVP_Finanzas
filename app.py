@@ -15,7 +15,7 @@ st.set_page_config(
 # Configurar Gemini AI
 try:
     genai.configure(api_key=os.getenv("API_KEY_GEMINI"))
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
 except Exception as e:
     st.error("Error configurando Gemini AI. Verifica tu API_KEY_GEMINI en las variables de entorno.")
 
