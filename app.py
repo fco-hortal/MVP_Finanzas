@@ -72,10 +72,13 @@ st.logo('logo.png', size="large")
 # CSS personalizado
 st.markdown("""
 <style>
-    .main-header { font-size: 2.5rem; font-weight: bold; color: #1f77b4; text-align: center; margin-bottom: 2rem; }
-    .chat-message { padding: 1rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #1f77b4; }
-    .user-message { background-color: #e3f2fd; border-left-color: #2196f3; }
-    .bot-message { background-color: #f3e5f5; border-left-color: #9c27b0; }
+    .stChatMessage {
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+    .stChatMessage .stMarkdown {
+        white-space: pre-wrap;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -131,23 +134,24 @@ if uploaded_file is not None:
         excel_context = df_to_context(excel_data)
         st.sidebar.success("✅ Archivo procesado correctamente.")
 
-# Chat
+# Inicializar historial de chat si no existe
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-user_input = st.chat_input("Escribe tu pregunta financiera aquí...")
+# Mostrar el historial de conversación
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Entrada del usuario
+user_input = st.chat_input("💬 Escribe tu pregunta financiera aquí...")
 
 if user_input:
-    # Guardar mensaje del usuario
+    # Mostrar entrada del usuario
+    st.chat_message("user").markdown(user_input)
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     
-    # Obtener respuesta
+    # Generar respuesta del asistente
     response = obtener_respuesta(user_input, excel_context)
+    st.chat_message("assistant").markdown(response)
     st.session_state.chat_history.append({"role": "assistant", "content": response})
-
-# Mostrar historial de chat
-for msg in st.session_state.chat_history:
-    if msg["role"] == "user":
-        st.markdown(f"<div class='chat-message user-message'>{msg['content']}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='chat-message bot-message'>{msg['content']}</div>", unsafe_allow_html=True)
