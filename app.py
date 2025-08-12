@@ -10,15 +10,19 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 
-# Configuración API
+# Configuración API - Vercel usa variables de entorno automáticamente
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     st.error("⚠️ **Error de configuración**: No se encontró GOOGLE_API_KEY")
     st.info("""
-    **Para resolver este error:**
+    **Para resolver este error en desarrollo:**
     1. Crea un archivo `.env` en la carpeta del proyecto
     2. Agrega esta línea: `GOOGLE_API_KEY=tu_clave_aqui`
     3. Reinicia la aplicación
+    
+    **Para resolver en producción (Vercel):**
+    1. Ve a tu dashboard de Vercel
+    2. Configura la variable de entorno GOOGLE_API_KEY
     """)
     st.stop()
 
