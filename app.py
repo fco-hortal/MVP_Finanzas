@@ -6,6 +6,8 @@ import json
 import hashlib
 from pathlib import Path
 from dotenv import load_dotenv
+import PyPDF2
+import io
 
 # Cargar variables de entorno
 load_dotenv()
@@ -116,6 +118,44 @@ Pregunta:
 """
 
 # ------------------- FUNCIONES -------------------
+def process_pdf_file(uploaded_file):
+    """Procesar archivo PDF y extraer texto"""
+    try:
+        # Leer el PDF
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.read()))
+        
+        result = []
+        result.append(f"=== ARCHIVO PDF: {uploaded_file.name} ===")
+        result.append(f"Total páginas: {len(pdf_reader.pages)}")
+        
+        # Extraer texto de todas las páginas
+        full_text = ""
+        for page_num, page in enumerate(pdf_reader.pages, 1):
+            try:
+                page_text = page.extract_text()
+                if page_text.strip():  # Solo si la página tiene texto
+                    full_text += f"\n--- PÁGINA {page_num} ---\n"
+                    full_text += page_text
+            except Exception as e:
+                result.append(f"Error en página {page_num}: {str(e)}")
+        
+        if full_text.strip():
+            # Limitar el texto para no sobrecargar el prompt
+            if len(full_text) > 15000:  # Límite para PDFs
+                full_text = full_text[:15000] + "... [texto truncado]"
+            
+            result.append("\nCONTENIDO EXTRAÍDO:")
+            result.append(full_text)
+        else:
+            result.append("\nNo se pudo extraer texto del PDF o está vacío.")
+        
+        result.append("-" * 80)
+        return "\n".join(result)
+        
+    except Exception as e:
+        st.error(f"Error procesando el PDF: {str(e)}")
+        return None
+
 def process_excel_file(uploaded_file):
     try:
         excel_data = pd.read_excel(uploaded_file, sheet_name=None)
@@ -158,9 +198,24 @@ def process_excel_file(uploaded_file):
         st.error(f"Error procesando el archivo: {str(e)}")
         return None
 
-def obtener_respuesta(pregunta, excel_context):
+def process_uploaded_file(uploaded_file):
+    """Procesar archivo subido según su tipo"""
+    if uploaded_file is None:
+        return None
+    
+    file_extension = uploaded_file.name.lower().split('.')[-1]
+    
+    if file_extension == 'pdf':
+        return process_pdf_file(uploaded_file)
+    elif file_extension in ['xlsx', 'xls']:
+        return process_excel_file(uploaded_file)
+    else:
+        st.error(f"Tipo de archivo no soportado: {file_extension}")
+        return None
+
+def obtener_respuesta(pregunta, file_context):
     industria = st.session_state.user_profile.get("industria", "Otro")
-    prompt = construir_prompt(industria, st.session_state.user_profile, excel_context, pregunta)
+    prompt = construir_prompt(industria, st.session_state.user_profile, file_context, pregunta)
     
     model = genai.GenerativeModel("gemini-2.5-pro")
     resp = model.generate_content(prompt)
@@ -289,8 +344,11 @@ else:
         
         st.markdown("---")
         st.subheader("📁 Sube archivo financiero")
-        uploaded_file = st.file_uploader("Excel (.xlsx)", type=["xlsx"])
-        excel_context = process_excel_file(uploaded_file) if uploaded_file else None
+        uploaded_file = st.file_uploader(
+            "Excel (.xlsx) o PDF (.pdf)", 
+            type=["xlsx", "xls", "pdf"]
+        )
+        file_context = process_uploaded_file(uploaded_file) if uploaded_file else None
 
     # Chat
     for msg in st.session_state.chat_history:
@@ -301,6 +359,6 @@ else:
     if user_input:
         st.chat_message("user").markdown(user_input)
         st.session_state.chat_history.append({"role": "user", "content": user_input})
-        respuesta = obtener_respuesta(user_input, excel_context)
+        respuesta = obtener_respuesta(user_input, file_context)
         st.chat_message("assistant").markdown(respuesta)
         st.session_state.chat_history.append({"role": "assistant", "content": respuesta})
