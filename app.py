@@ -119,8 +119,41 @@ Pregunta:
 def process_excel_file(uploaded_file):
     try:
         excel_data = pd.read_excel(uploaded_file, sheet_name=None)
-        return "\n".join(f"Hoja: {name} | Columnas: {', '.join(map(str, df.columns))} | Filas: {len(df)}"
-                         for name, df in excel_data.items())
+        result = []
+        
+        for name, df in excel_data.items():
+            # Información básica de la hoja
+            result.append(f"\n=== HOJA: {name} ===")
+            result.append(f"Total filas: {len(df)} | Columnas: {len(df.columns)}")
+            result.append(f"Columnas: {', '.join(map(str, df.columns))}")
+            
+            # Filtrar filas que no estén completamente vacías
+            df_clean = df.dropna(how='all')  # Eliminar filas completamente vacías
+            filas_con_datos = len(df_clean)
+            filas_vacias = len(df) - filas_con_datos
+            
+            result.append(f"Filas con datos: {filas_con_datos} | Filas vacías: {filas_vacias}")
+            
+            # Contenido de los datos (primeras 200 filas con datos)
+            if filas_con_datos > 0:
+                result.append(f"\nPRIMERAS {min(200, filas_con_datos)} FILAS CON DATOS:")
+                
+                # Tomar las primeras 200 filas que tengan al menos algún dato
+                df_preview = df_clean.head(200)
+                
+                # Convertir a string y limitar caracteres para no sobrecargar
+                df_string = df_preview.to_string(index=False, max_cols=20)
+                if len(df_string) > 8000:  # Límite más alto para 200 filas
+                    df_string = df_string[:8000] + "... [datos truncados]"
+                
+                result.append(df_string)
+            else:
+                result.append("\nEsta hoja no contiene datos válidos.")
+            
+            result.append("-" * 80)
+        
+        return "\n".join(result)
+        
     except Exception as e:
         st.error(f"Error procesando el archivo: {str(e)}")
         return None

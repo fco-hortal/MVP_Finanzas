@@ -3,5 +3,3 @@ pandas
 google-generativeai
 python-dotenv
 openpyxl
-openpyxl
-python-dotenv
