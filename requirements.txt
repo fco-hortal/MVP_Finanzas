@@ -1,7 +1,7 @@
-streamlit==1.28.1
-pandas==2.0.3
-google-generativeai==0.3.2
-python-dotenv==1.0.0
-openpyxl==3.1.2
+streamlit
+pandas
+google-generativeai
+python-dotenv
+openpyxl
 openpyxl
 python-dotenv
