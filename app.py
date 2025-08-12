@@ -2,9 +2,84 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import os
+import json
+import hashlib
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Configuración API
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    st.error("⚠️ **Error de configuración**: No se encontró GOOGLE_API_KEY")
+    st.info("""
+    **Para resolver este error:**
+    1. Crea un archivo `.env` en la carpeta del proyecto
+    2. Agrega esta línea: `GOOGLE_API_KEY=tu_clave_aqui`
+    3. Reinicia la aplicación
+    """)
+    st.stop()
+
+genai.configure(api_key=api_key)
+
+# ------------------- GESTIÓN DE USUARIOS -------------------
+USERS_FILE = "users.json"
+
+def load_users():
+    """Cargar usuarios desde archivo JSON"""
+    if Path(USERS_FILE).exists():
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def save_users(users):
+    """Guardar usuarios en archivo JSON"""
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+def hash_password(password):
+    """Generar hash de contraseña"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def create_user(email, password, profile):
+    """Crear nuevo usuario"""
+    users = load_users()
+    if email in users:
+        return False, "El usuario ya existe"
+    
+    users[email] = {
+        "password": hash_password(password),
+        "profile": profile,
+        "created_at": str(pd.Timestamp.now())
+    }
+    save_users(users)
+    return True, "Usuario creado exitosamente"
+
+def authenticate_user(email, password):
+    """Autenticar usuario"""
+    users = load_users()
+    if email not in users:
+        return False, None
+    
+    if users[email]["password"] == hash_password(password):
+        return True, users[email]["profile"]
+    return False, None
+
+def get_user_profile(email):
+    """Obtener perfil de usuario"""
+    users = load_users()
+    return users.get(email, {}).get("profile", {})
+
+def update_user_profile(email, profile):
+    """Actualizar perfil de usuario"""
+    users = load_users()
+    if email in users:
+        users[email]["profile"] = profile
+        save_users(users)
+        return True
+    return False
 
 # ------------------- DATOS SECTORIALES -------------------
 conocimiento_sectorial = {
@@ -59,6 +134,8 @@ st.set_page_config(page_title="Finni", page_icon=":brain:", layout="centered")
 
 # ------------------- ESTADO -------------------
 for key, val in {
+    "authenticated": False,
+    "current_user": None,
     "onboarding_step": 0,
     "onboarding_completed": False,
     "user_profile": {},
@@ -83,22 +160,92 @@ def show_onboarding():
     st.subheader(f"Paso {step+1}/{len(steps)}: {titulo}")
     value = st.radio("Selecciona una opción:", opciones)
     
-    if st.button("Siguiente ➡️", use_container_width=True):
+    if st.button("Siguiente ➡️", use_container_width=True, key=f"onboarding_step_{step}"):
         st.session_state.user_profile[key] = value
         if step + 1 < len(steps):
             st.session_state.onboarding_step += 1
+            st.rerun()
         else:
+            # Guardar perfil en base de datos
+            update_user_profile(st.session_state.current_user, st.session_state.user_profile)
             st.session_state.onboarding_completed = True
+            st.rerun()
+
+# ------------------- AUTENTICACIÓN -------------------
+def show_auth():
+    tab1, tab2 = st.tabs(["Iniciar Sesión", "Registrarse"])
+    
+    with tab1:
+        st.subheader("Iniciar Sesión")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Contraseña", type="password", key="login_password")
+        
+        if st.button("Iniciar Sesión", use_container_width=True, key="login_btn"):
+            if email and password:
+                auth_success, profile = authenticate_user(email, password)
+                if auth_success:
+                    st.session_state.authenticated = True
+                    st.session_state.current_user = email
+                    st.session_state.user_profile = profile
+                    st.session_state.onboarding_completed = bool(profile)
+                    st.success("Sesión iniciada correctamente")
+                    st.rerun()
+                else:
+                    st.error("Email o contraseña incorrectos")
+            else:
+                st.error("Por favor completa todos los campos")
+    
+    with tab2:
+        st.subheader("Crear Cuenta")
+        new_email = st.text_input("Email", key="register_email")
+        new_password = st.text_input("Contraseña", type="password", key="register_password")
+        confirm_password = st.text_input("Confirmar Contraseña", type="password", key="confirm_password")
+        
+        if st.button("Registrarse", use_container_width=True, key="register_btn"):
+            if new_email and new_password and confirm_password:
+                if new_password != confirm_password:
+                    st.error("Las contraseñas no coinciden")
+                elif len(new_password) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres")
+                else:
+                    success, message = create_user(new_email, new_password, {})
+                    if success:
+                        # Auto-login después del registro
+                        st.session_state.authenticated = True
+                        st.session_state.current_user = new_email
+                        st.session_state.user_profile = {}
+                        st.session_state.onboarding_completed = False
+                        st.success("¡Cuenta creada! Ahora completa tu perfil")
+                        st.rerun()
+                    else:
+                        st.error(message)
+            else:
+                st.error("Por favor completa todos los campos")
 
 # ------------------- INTERFAZ -------------------
 st.title(":brain: Finni")
 st.markdown("Asistente financiero para emprendedores y dueños de negocios.")
 
-if not st.session_state.onboarding_completed:
+if not st.session_state.authenticated:
+    show_auth()
+elif not st.session_state.onboarding_completed:
+    st.subheader(f"¡Bienvenido {st.session_state.current_user}!")
+    st.markdown("Completa tu perfil para personalizar tu experiencia")
     show_onboarding()
 else:
-    # Sidebar perfil
+    # Sidebar perfil y logout
     with st.sidebar:
+        st.subheader(f"👋 {st.session_state.current_user}")
+        if st.button("Cerrar Sesión", key="logout_btn"):
+            st.session_state.authenticated = False
+            st.session_state.current_user = None
+            st.session_state.user_profile = {}
+            st.session_state.chat_history = []
+            st.session_state.onboarding_step = 0
+            st.session_state.onboarding_completed = False
+            st.rerun()
+        
+        st.markdown("---")
         st.subheader("🎯 Tu Perfil")
         for k, v in st.session_state.user_profile.items():
             st.markdown(f"**{k.capitalize()}**: {v}")
